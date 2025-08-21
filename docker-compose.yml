@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  claude-agent:
+    build: .
+    container_name: claude-auto-refresh
+    restart: unless-stopped
+    environment:
+      # Timezone
+      - TZ=Asia/Shanghai
+      # Unified configuration
+      - CLAUDE_ENDPOINT=${CLAUDE_ENDPOINT}
+      - CLAUDE_API_KEYS=${CLAUDE_API_KEYS}
+      # Legacy group configuration (fallback)
+      - CLAUDE_GROUP_1_ENDPOINT=${CLAUDE_GROUP_1_ENDPOINT}
+      - CLAUDE_GROUP_1_API_KEY=${CLAUDE_GROUP_1_API_KEY}
+      # Log level
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - ./logs:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
