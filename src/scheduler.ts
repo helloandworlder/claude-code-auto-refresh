@@ -14,23 +14,37 @@ export class TaskScheduler {
   }
   
   start(): void {
-    console.log('Starting task scheduler...');
+    console.log('[SCHEDULER] Starting task scheduler...');
     
     // 首次启动立即发送保活消息
-    this.sendInitialKeepAliveMessages();
+    this.sendInitialKeepAliveMessages().catch(error => {
+      console.error('[SCHEDULER] Failed to send initial keep-alive messages:', error);
+    });
     
     // 每分钟检查是否需要执行任务
     cron.schedule('* * * * *', () => {
-      this.checkAndExecuteTasks();
+      this.checkAndExecuteTasks().catch(error => {
+        console.error('[SCHEDULER] Error in checkAndExecuteTasks:', error);
+      });
     });
     
     // 每个整点后安排下一批任务
     cron.schedule('0 * * * *', () => {
-      this.scheduleNextHourTasks();
+      try {
+        console.log('[SCHEDULER] Hourly scheduling trigger at', new Date().toLocaleString());
+        this.scheduleNextHourTasks();
+      } catch (error) {
+        console.error('[SCHEDULER] Error in scheduleNextHourTasks:', error);
+      }
     });
     
-    // 初始化：为当前小时安排任务
-    this.scheduleNextHourTasks();
+    // 初始化：为当前小时和下一小时安排任务
+    try {
+      this.scheduleNextHourTasks();
+      console.log('[SCHEDULER] Initial task scheduling completed');
+    } catch (error) {
+      console.error('[SCHEDULER] Failed to schedule initial tasks:', error);
+    }
   }
   
   private scheduleNextHourTasks(): void {
@@ -40,34 +54,44 @@ export class TaskScheduler {
     
     console.log(`Scheduling tasks for hour ${nextHour}:00`);
     
-    // 清除旧任务
-    this.scheduledTasks = [];
+    // 只清除过期的任务，保留未来的任务
+    const cutoffTime = new Date(now.getTime() - 5 * 60 * 1000); // 5分钟前
+    this.scheduledTasks = this.scheduledTasks.filter(task => task.scheduledTime > cutoffTime);
     
-    // 为每个代理安排一个随机时间的任务（整点后1-5分钟）
+    // 检查每个代理是否已经有未来的任务安排
     this.agents.forEach((agent, groupId) => {
-      const randomMinutes = Math.floor(Math.random() * 5) + 1; // 1-5分钟
-      const scheduledTime = new Date();
-      scheduledTime.setHours(nextHour, randomMinutes, 0, 0);
+      const hasScheduledTask = this.scheduledTasks.some(task =>
+        task.groupId === groupId && task.scheduledTime > now
+      );
       
-      // 如果是当前小时且时间已过，则安排到明天同一时间
-      if (scheduledTime <= now) {
-        scheduledTime.setDate(scheduledTime.getDate() + 1);
+      if (!hasScheduledTask) {
+        // 为没有未来任务的代理安排一个随机时间的任务（整点后1-5分钟）
+        const randomMinutes = Math.floor(Math.random() * 5) + 1; // 1-5分钟
+        const scheduledTime = new Date();
+        scheduledTime.setHours(nextHour, randomMinutes, 0, 0);
+        
+        // 如果是当前小时且时间已过，则安排到明天同一时间
+        if (scheduledTime <= now) {
+          scheduledTime.setDate(scheduledTime.getDate() + 1);
+        }
+        
+        const task: ScheduleTask = {
+          id: `${groupId}_${scheduledTime.getTime()}`,
+          groupId,
+          scheduledTime
+        };
+        
+        this.scheduledTasks.push(task);
+        console.log(`Scheduled task for ${groupId} at ${scheduledTime.toLocaleString()}`);
+      } else {
+        console.log(`${groupId} already has scheduled task, skipping`);
       }
-      
-      const task: ScheduleTask = {
-        id: `${groupId}_${scheduledTime.getTime()}`,
-        groupId,
-        scheduledTime
-      };
-      
-      this.scheduledTasks.push(task);
-      console.log(`Scheduled task for ${groupId} at ${scheduledTime.toLocaleString()}`);
     });
   }
   
   private async checkAndExecuteTasks(): Promise<void> {
     const now = new Date();
-    const tasksToExecute = this.scheduledTasks.filter(task => 
+    const tasksToExecute = this.scheduledTasks.filter(task =>
       task.scheduledTime <= now
     );
     
@@ -75,26 +99,35 @@ export class TaskScheduler {
       return;
     }
     
-    console.log(`Executing ${tasksToExecute.length} scheduled tasks...`);
+    console.log(`[SCHEDULER] Executing ${tasksToExecute.length} scheduled tasks at ${now.toLocaleString()}`);
     
     // 并行执行所有到期的任务
     const promises = tasksToExecute.map(async (task) => {
       const agent = this.agents.get(task.groupId);
       if (agent) {
         try {
-          await agent.sendKeepAliveMessage();
+          console.log(`[SCHEDULER] Executing task ${task.id} for ${task.groupId}`);
+          const success = await agent.sendKeepAliveMessage();
+          if (!success) {
+            console.warn(`[SCHEDULER] Task ${task.id} returned false, but will be marked as completed`);
+          }
         } catch (error) {
-          console.error(`Failed to execute task ${task.id}:`, error);
+          console.error(`[SCHEDULER] Failed to execute task ${task.id}:`, error);
+          // 即使失败也移除任务，避免重复执行失败的任务
         }
+      } else {
+        console.error(`[SCHEDULER] No agent found for task ${task.id} with groupId ${task.groupId}`);
       }
     });
     
     await Promise.all(promises);
     
     // 移除已执行的任务
-    this.scheduledTasks = this.scheduledTasks.filter(task => 
+    this.scheduledTasks = this.scheduledTasks.filter(task =>
       !tasksToExecute.includes(task)
     );
+    
+    console.log(`[SCHEDULER] Completed ${tasksToExecute.length} tasks. Remaining tasks: ${this.scheduledTasks.length}`);
   }
   
   private async sendInitialKeepAliveMessages(): Promise<void> {
