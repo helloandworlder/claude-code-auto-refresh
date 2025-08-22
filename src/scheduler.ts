@@ -58,13 +58,8 @@ export class TaskScheduler {
     const cutoffTime = new Date(now.getTime() - 5 * 60 * 1000); // 5分钟前
     this.scheduledTasks = this.scheduledTasks.filter(task => task.scheduledTime > cutoffTime);
     
-    // 检查每个代理是否已经有未来的任务安排
+   // 为每个代理安排下一个小时的任务
     this.agents.forEach((agent, groupId) => {
-      const hasScheduledTask = this.scheduledTasks.some(task =>
-        task.groupId === groupId && task.scheduledTime > now
-      );
-      
-      if (!hasScheduledTask) {
         // 为没有未来任务的代理安排一个随机时间的任务（整点后1-5分钟）
         const randomMinutes = Math.floor(Math.random() * 5) + 1; // 1-5分钟
         const scheduledTime = new Date();
@@ -83,9 +78,6 @@ export class TaskScheduler {
         
         this.scheduledTasks.push(task);
         console.log(`Scheduled task for ${groupId} at ${scheduledTime.toLocaleString()}`);
-      } else {
-        console.log(`${groupId} already has scheduled task, skipping`);
-      }
     });
   }
   
