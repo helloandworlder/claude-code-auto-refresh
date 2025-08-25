@@ -7,6 +7,7 @@ export class TaskScheduler {
   private agents: Map<string, ClaudeAgent> = new Map();
   private strategy: IScheduleStrategy;
   private scheduledTasks: ScheduleTask[] = [];
+  private lastTaskCount: number = 0;
   
   constructor(groups: ClaudeGroup[], scheduleConfig: ScheduleConfig) {
     // 为每个组创建独立的代理实例
@@ -55,8 +56,10 @@ export class TaskScheduler {
     // 从策略获取最新的任务列表
     this.scheduledTasks = this.strategy.getNextTasks();
     
-    if (this.scheduledTasks.length > 0) {
+    // 只在任务数量发生变化时打印日志
+    if (this.scheduledTasks.length !== this.lastTaskCount) {
       console.log(`[SCHEDULER] Updated task list: ${this.scheduledTasks.length} tasks scheduled`);
+      this.lastTaskCount = this.scheduledTasks.length;
     }
   }
   

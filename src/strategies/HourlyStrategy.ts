@@ -9,6 +9,8 @@ export class HourlyStrategy implements IScheduleStrategy {
   
   initialize(agents: Map<string, ClaudeAgent>): void {
     this.agents = agents;
+    // 设置当前小时，避免 getNextTasks 重复调度
+    this.lastScheduledHour = new Date().getHours();
     this.scheduleNextHourTasks();
   }
   

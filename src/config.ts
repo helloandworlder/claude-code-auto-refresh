@@ -53,7 +53,8 @@ export function loadConfig(): AgentConfig {
   }
   
   // 加载调度配置
-  const scheduleMode = (process.env.SCHEDULE_MODE?.toLowerCase() as ScheduleMode) || ScheduleMode.HOURLY;
+  const scheduleModeEnv = process.env.SCHEDULE_MODE?.toLowerCase();
+  const scheduleMode = scheduleModeEnv === 'custom' ? ScheduleMode.CUSTOM : ScheduleMode.HOURLY;
   let schedule: ScheduleConfig = {
     mode: scheduleMode
   };
