@@ -1,20 +1,29 @@
 import * as cron from 'node-cron';
 import { ClaudeAgent } from './agent';
-import { ClaudeGroup, ScheduleTask } from './types';
+import { ClaudeGroup, ScheduleTask, ScheduleConfig } from './types';
+import { IScheduleStrategy, StrategyFactory } from './strategies';
 
 export class TaskScheduler {
   private agents: Map<string, ClaudeAgent> = new Map();
+  private strategy: IScheduleStrategy;
   private scheduledTasks: ScheduleTask[] = [];
   
-  constructor(groups: ClaudeGroup[]) {
+  constructor(groups: ClaudeGroup[], scheduleConfig: ScheduleConfig) {
     // 为每个组创建独立的代理实例
     groups.forEach(group => {
       this.agents.set(group.id, new ClaudeAgent(group));
     });
+    
+    // 创建调度策略
+    this.strategy = StrategyFactory.createStrategy(scheduleConfig);
+    console.log(`[SCHEDULER] Using ${this.strategy.getName()} strategy`);
   }
   
   start(): void {
     console.log('[SCHEDULER] Starting task scheduler...');
+    
+    // 初始化策略
+    this.strategy.initialize(this.agents);
     
     // 首次启动立即发送保活消息
     this.sendInitialKeepAliveMessages().catch(error => {
@@ -28,61 +37,37 @@ export class TaskScheduler {
       });
     });
     
-    // 每个整点后安排下一批任务
-    cron.schedule('0 * * * *', () => {
+    // 每分钟更新任务列表
+    cron.schedule('* * * * *', () => {
       try {
-        console.log('[SCHEDULER] Hourly scheduling trigger at', new Date().toLocaleString());
-        this.scheduleNextHourTasks();
+        this.updateScheduledTasks();
       } catch (error) {
-        console.error('[SCHEDULER] Error in scheduleNextHourTasks:', error);
+        console.error('[SCHEDULER] Error in updateScheduledTasks:', error);
       }
     });
     
-    // 初始化：为当前小时和下一小时安排任务
-    try {
-      this.scheduleNextHourTasks();
-      console.log('[SCHEDULER] Initial task scheduling completed');
-    } catch (error) {
-      console.error('[SCHEDULER] Failed to schedule initial tasks:', error);
-    }
+    // 初始化任务列表
+    this.updateScheduledTasks();
+    console.log('[SCHEDULER] Task scheduler started successfully');
   }
   
-  private scheduleNextHourTasks(): void {
-    const now = new Date();
-    const currentHour = now.getHours();
-    const nextHour = (currentHour + 1) % 24;
+  private updateScheduledTasks(): void {
+    // 从策略获取最新的任务列表
+    this.scheduledTasks = this.strategy.getNextTasks();
     
-    console.log(`Scheduling tasks for hour ${nextHour}:00`);
-    
-    // 只清除过期的任务，保留未来的任务
-    const cutoffTime = new Date(now.getTime() - 5 * 60 * 1000); // 5分钟前
-    this.scheduledTasks = this.scheduledTasks.filter(task => task.scheduledTime > cutoffTime);
-    
-   // 为每个代理安排下一个小时的任务
-    this.agents.forEach((agent, groupId) => {
-        // 为没有未来任务的代理安排一个随机时间的任务（整点后1-5分钟）
-        const randomMinutes = Math.floor(Math.random() * 5) + 1; // 1-5分钟
-        const scheduledTime = new Date();
-        scheduledTime.setHours(nextHour, randomMinutes, 0, 0);
-        
-        // 如果是当前小时且时间已过，则安排到明天同一时间
-        if (scheduledTime <= now) {
-          scheduledTime.setDate(scheduledTime.getDate() + 1);
-        }
-        
-        const task: ScheduleTask = {
-          id: `${groupId}_${scheduledTime.getTime()}`,
-          groupId,
-          scheduledTime
-        };
-        
-        this.scheduledTasks.push(task);
-        console.log(`Scheduled task for ${groupId} at ${scheduledTime.toLocaleString()}`);
-    });
+    if (this.scheduledTasks.length > 0) {
+      console.log(`[SCHEDULER] Updated task list: ${this.scheduledTasks.length} tasks scheduled`);
+    }
   }
   
   private async checkAndExecuteTasks(): Promise<void> {
     const now = new Date();
+    
+    // 检查策略是否允许当前时间执行
+    if (!this.strategy.shouldRunNow(now)) {
+      return;
+    }
+    
     const tasksToExecute = this.scheduledTasks.filter(task =>
       task.scheduledTime <= now
     );
@@ -105,7 +90,6 @@ export class TaskScheduler {
           }
         } catch (error) {
           console.error(`[SCHEDULER] Failed to execute task ${task.id}:`, error);
-          // 即使失败也移除任务，避免重复执行失败的任务
         }
       } else {
         console.error(`[SCHEDULER] No agent found for task ${task.id} with groupId ${task.groupId}`);
@@ -114,7 +98,7 @@ export class TaskScheduler {
     
     await Promise.all(promises);
     
-    // 移除已执行的任务
+    // 从任务列表中移除已执行的任务
     this.scheduledTasks = this.scheduledTasks.filter(task =>
       !tasksToExecute.includes(task)
     );
@@ -123,7 +107,7 @@ export class TaskScheduler {
   }
   
   private async sendInitialKeepAliveMessages(): Promise<void> {
-    console.log('Sending initial keep-alive messages for all groups...');
+    console.log('[SCHEDULER] Sending initial keep-alive messages for all groups...');
     
     const promises = Array.from(this.agents.entries()).map(async ([groupId, agent]) => {
       try {
@@ -135,7 +119,7 @@ export class TaskScheduler {
     });
     
     await Promise.all(promises);
-    console.log('Initial keep-alive messages completed.');
+    console.log('[SCHEDULER] Initial keep-alive messages completed.');
   }
   
   getScheduledTasks(): ScheduleTask[] {

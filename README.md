@@ -10,7 +10,9 @@
 ## ✨ 功能特性
 
 - 🚀 **首次启动立即发送**：启动后立即发送保活消息，无需等待
-- 🔄 **智能调度系统**：每个整点后随机 1-5 分钟发送保活消息
+- 🔄 **智能调度系统**：支持两种调度模式
+  - **HOURLY 模式**（默认）：每个整点后随机 1-5 分钟发送保活消息
+  - **CUSTOM 模式**：自定义时间区间触发，支持跨天和工作日限制
 - 🔑 **灵活配置方式**：支持统一 Endpoint + 多个 API Key 配置
 - 🏠 **独立实例管理**：每个 API Key 使用独立的 Claude Code 实例
 - 📊 **完整日志输出**：显示 AI 回复内容和成本信息
@@ -37,6 +39,15 @@ cp .env.example .env
 # 统一 Endpoint + 多个 API Key 配置（推荐）
 CLAUDE_ENDPOINT=https://claude-relay.synex.im/api
 CLAUDE_API_KEYS=your-api-key-1,your-api-key-2,your-api-key-3
+
+# 调度模式配置（可选）
+SCHEDULE_MODE=hourly  # hourly(默认) 或 custom
+
+# 自定义调度配置（当 SCHEDULE_MODE=custom 时生效）
+# SCHEDULE_START_TIME=09:00    # 开始时间
+# SCHEDULE_END_TIME=02:00      # 结束时间（支持跨天）
+# SCHEDULE_INTERVAL=30         # 执行间隔（分钟）
+# SCHEDULE_WEEKDAYS=1,2,3,4,5  # 工作日限制（1=周一，7=周日）
 
 # 可选：日志级别
 LOG_LEVEL=info
@@ -119,11 +130,17 @@ Agent is running. Press Ctrl+C to stop.
 | `CLAUDE_API_KEYS` | API 密钥列表（逗号分隔） | `key1,key2,key3` | 是* |
 | `CLAUDE_GROUP_N_ENDPOINT` | 第 N 组的 API 端点 | `https://api.anthropic.com` | 否** |
 | `CLAUDE_GROUP_N_API_KEY` | 第 N 组的 API 密钥 | `your-api-key` | 否** |
+| `SCHEDULE_MODE` | 调度模式 | `hourly`/`custom` | 否 |
+| `SCHEDULE_START_TIME` | 自定义模式开始时间 | `09:00` | 否*** |
+| `SCHEDULE_END_TIME` | 自定义模式结束时间 | `18:00` 或 `02:00`（跨天） | 否*** |
+| `SCHEDULE_INTERVAL` | 执行间隔（分钟） | `30` | 否*** |
+| `SCHEDULE_WEEKDAYS` | 工作日限制 | `1,2,3,4,5` (周一至周五) | 否 |
 | `LOG_LEVEL` | 日志级别 | `info`/`debug`/`warn`/`error` | 否 |
 | `TZ` | 时区设置 | `Asia/Shanghai` | 否 |
 
 \* 使用统一配置时必填  
-\*\* 使用传统分组配置时必填
+\*\* 使用传统分组配置时必填  
+\*\*\* 使用自定义调度模式时必填
 
 ### Docker Compose 配置
 
@@ -145,10 +162,40 @@ services:
 
 ## 🔄 调度机制
 
+### HOURLY 模式（默认）
 - **启动时**：立即发送保活消息给所有配置的 API Key
 - **定时任务**：每个整点后的 1-5 分钟内随机发送
 - **任务分布**：不同 API Key 的任务时间随机分布，避免同时请求
 - **状态监控**：每 30 分钟输出一次调度状态
+
+### CUSTOM 模式
+- **时间区间**：在指定的开始和结束时间内执行
+- **执行间隔**：按照设定的间隔时间（分钟）执行任务
+- **跨天支持**：支持跨天时间设置（如 21:00 - 02:00）
+- **工作日限制**：可选择只在特定工作日执行
+
+### 配置示例
+
+```env
+# 示例1：工作时间模式（9:00-18:00，每30分钟）
+SCHEDULE_MODE=custom
+SCHEDULE_START_TIME=09:00
+SCHEDULE_END_TIME=18:00
+SCHEDULE_INTERVAL=30
+SCHEDULE_WEEKDAYS=1,2,3,4,5
+
+# 示例2：夜间模式（21:00-次日2:00，每45分钟）
+SCHEDULE_MODE=custom
+SCHEDULE_START_TIME=21:00
+SCHEDULE_END_TIME=02:00
+SCHEDULE_INTERVAL=45
+
+# 示例3：全天模式（9:00-次日2:00，每60分钟）
+SCHEDULE_MODE=custom
+SCHEDULE_START_TIME=09:00
+SCHEDULE_END_TIME=02:00
+SCHEDULE_INTERVAL=60
+```
 
 ## 📝 最佳实践
 
@@ -188,7 +235,12 @@ claude-code-auto-refresh/
 │   ├── config.ts         # 配置管理
 │   ├── agent.ts          # Claude 代理
 │   ├── scheduler.ts      # 任务调度器
-│   └── types.ts          # 类型定义
+│   ├── types.ts          # 类型定义
+│   └── strategies/       # 调度策略
+│       ├── IScheduleStrategy.ts  # 策略接口
+│       ├── HourlyStrategy.ts     # 每小时策略
+│       ├── CustomStrategy.ts     # 自定义策略
+│       └── StrategyFactory.ts    # 策略工厂
 ├── docker-compose.yml    # Docker 配置
 ├── Dockerfile           # Docker 镜像
 └── README.md           # 使用说明

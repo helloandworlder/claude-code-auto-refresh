@@ -9,8 +9,8 @@ async function main() {
     const config = loadConfig();
     console.log(`Initialized with ${config.groups.length} Claude groups`);
     
-    // 创建任务调度器
-    const scheduler = new TaskScheduler(config.groups);
+    // 创建任务调度器，传递调度配置
+    const scheduler = new TaskScheduler(config.groups, config.schedule);
     
     // 启动调度器
     scheduler.start();
@@ -20,9 +20,9 @@ async function main() {
     // 每30分钟输出一次当前调度状态
     setInterval(() => {
       const tasks = scheduler.getScheduledTasks();
-      console.log(`Current scheduled tasks: ${tasks.length}`);
+      console.log(`[STATUS] Current scheduled tasks: ${tasks.length}`);
       tasks.forEach(task => {
-        console.log(`- ${task.groupId}: ${task.scheduledTime.toLocaleString()}`);
+        console.log(`  - ${task.groupId}: ${task.scheduledTime.toLocaleString()}`);
       });
     }, 30 * 60 * 1000);
     
