@@ -69,16 +69,32 @@ LOG_LEVEL=info
 
 ### 🐳 Docker 部署（推荐）
 
+使用 Docker Hub 镜像快速部署：
+
 ```bash
-# 启动服务
+# 1. 克隆仓库获取配置文件
+git clone https://github.com/yourusername/claude-code-auto-refresh.git
+cd claude-code-auto-refresh
+
+# 2. 配置环境变量
+cp .env.example .env
+# 编辑 .env 文件，设置你的 API keys
+
+# 3. 启动服务（自动拉取镜像）
 docker-compose up -d
 
-# 查看实时日志
+# 查看日志
 docker-compose logs -f
 
 # 停止服务
 docker-compose down
+
+# 更新到最新版本
+docker-compose pull
+docker-compose up -d
 ```
+
+> 💡 镜像地址：[sczheng189/claude-auto-refresh](https://hub.docker.com/r/sczheng189/claude-auto-refresh)
 
 ### 💻 本地开发
 
