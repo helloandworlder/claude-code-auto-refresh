@@ -10,7 +10,7 @@ async function main() {
     console.log(`Initialized with ${config.groups.length} Claude groups`);
     
     // 创建任务调度器
-    const scheduler = new TaskScheduler(config.groups);
+    const scheduler = new TaskScheduler(config.groups, config.schedule);
     
     // 启动调度器
     scheduler.start();

@@ -2,7 +2,13 @@ version: '3.8'
 
 services:
   claude-agent:
-    build: .
+    # 方式1：使用预构建镜像（推荐，快速启动）
+    image: sczheng189/claude-auto-refresh:v1.1-stable
+    
+    # 方式2：本地构建（适合开发或需要自定义的场景）
+    # 如需本地构建，请注释上面的 image: 并取消注释下面的 build:
+    # build: .
+    
     container_name: claude-auto-refresh
     restart: unless-stopped
     environment:
@@ -11,6 +17,11 @@ services:
       # Unified configuration
       - CLAUDE_ENDPOINT=${CLAUDE_ENDPOINT}
       - CLAUDE_API_KEYS=${CLAUDE_API_KEYS}
+      # Schedule configuration
+      - SCHEDULE_MODE=${SCHEDULE_MODE:-hourly}
+      - CUSTOM_START_HOUR=${CUSTOM_START_HOUR:-9}
+      - CUSTOM_END_HOUR=${CUSTOM_END_HOUR:-18}
+      - CUSTOM_WEEKDAYS=${CUSTOM_WEEKDAYS:-1,2,3,4,5}
       # Legacy group configuration (fallback)
       - CLAUDE_GROUP_1_ENDPOINT=${CLAUDE_GROUP_1_ENDPOINT}
       - CLAUDE_GROUP_1_API_KEY=${CLAUDE_GROUP_1_API_KEY}
