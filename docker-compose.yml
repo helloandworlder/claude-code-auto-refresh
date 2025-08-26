@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   claude-agent:
-    build: .
+    image: sczheng189/claude-auto-refresh:v1.1-stable
     container_name: claude-auto-refresh
     restart: unless-stopped
     environment:
@@ -11,6 +11,11 @@ services:
       # Unified configuration
       - CLAUDE_ENDPOINT=${CLAUDE_ENDPOINT}
       - CLAUDE_API_KEYS=${CLAUDE_API_KEYS}
+      # Schedule configuration
+      - SCHEDULE_MODE=${SCHEDULE_MODE:-hourly}
+      - CUSTOM_START_HOUR=${CUSTOM_START_HOUR:-9}
+      - CUSTOM_END_HOUR=${CUSTOM_END_HOUR:-18}
+      - CUSTOM_WEEKDAYS=${CUSTOM_WEEKDAYS:-1,2,3,4,5}
       # Legacy group configuration (fallback)
       - CLAUDE_GROUP_1_ENDPOINT=${CLAUDE_GROUP_1_ENDPOINT}
       - CLAUDE_GROUP_1_API_KEY=${CLAUDE_GROUP_1_API_KEY}
