@@ -10,7 +10,8 @@
 ## ✨ 功能特性
 
 - 🚀 **首次启动立即发送**：启动后立即发送保活消息，无需等待
-- 🔄 **智能调度系统**：每个整点后随机 1-5 分钟发送保活消息
+- 🔄 **智能调度系统**：支持 24*7 和自定义时间段两种调度模式
+- 🕰️ **自定义模式**：支持工作日和工作时间段限制（如周一到周五 9:00-18:00）
 - 🔑 **灵活配置方式**：支持统一 Endpoint + 多个 API Key 配置
 - 🏠 **独立实例管理**：每个 API Key 使用独立的 Claude Code 实例
 - 📊 **完整日志输出**：显示 AI 回复内容和成本信息
@@ -37,6 +38,14 @@ cp .env.example .env
 # 统一 Endpoint + 多个 API Key 配置（推荐）
 CLAUDE_ENDPOINT=https://claude-relay.synex.im/api
 CLAUDE_API_KEYS=your-api-key-1,your-api-key-2,your-api-key-3
+
+# 调度模式配置
+SCHEDULE_MODE=hourly  # hourly: 24*7模式, custom: 自定义模式
+
+# 自定义模式配置（可选，仅在 SCHEDULE_MODE=custom 时生效）
+CUSTOM_START_HOUR=9      # 开始小时 (0-23)
+CUSTOM_END_HOUR=18       # 结束小时 (0-23)
+CUSTOM_WEEKDAYS=1,2,3,4,5  # 工作日 (0=周日,1=周一,...,6=周六)
 
 # 可选：日志级别
 LOG_LEVEL=info
@@ -117,13 +126,18 @@ Agent is running. Press Ctrl+C to stop.
 |--------|------|------|------|
 | `CLAUDE_ENDPOINT` | 统一的 API 端点 | `https://claude-relay.synex.im/api` | 是* |
 | `CLAUDE_API_KEYS` | API 密钥列表（逗号分隔） | `key1,key2,key3` | 是* |
+| `SCHEDULE_MODE` | 调度模式 | `hourly`/`custom` | 否 |
+| `CUSTOM_START_HOUR` | 自定义模式开始小时 | `9` | 否*** |
+| `CUSTOM_END_HOUR` | 自定义模式结束小时 | `18` | 否*** |
+| `CUSTOM_WEEKDAYS` | 自定义模式工作日 | `1,2,3,4,5` | 否*** |
 | `CLAUDE_GROUP_N_ENDPOINT` | 第 N 组的 API 端点 | `https://api.anthropic.com` | 否** |
 | `CLAUDE_GROUP_N_API_KEY` | 第 N 组的 API 密钥 | `your-api-key` | 否** |
 | `LOG_LEVEL` | 日志级别 | `info`/`debug`/`warn`/`error` | 否 |
 | `TZ` | 时区设置 | `Asia/Shanghai` | 否 |
 
 \* 使用统一配置时必填  
-\*\* 使用传统分组配置时必填
+\*\* 使用传统分组配置时必填  
+\*\*\* 仅在 `SCHEDULE_MODE=custom` 时相关
 
 ### Docker Compose 配置
 
@@ -145,10 +159,21 @@ services:
 
 ## 🔄 调度机制
 
+### Hourly 模式（默认）
+- **24*7 运行**：全天候每小时保活
 - **启动时**：立即发送保活消息给所有配置的 API Key
 - **定时任务**：每个整点后的 1-5 分钟内随机发送
 - **任务分布**：不同 API Key 的任务时间随机分布，避免同时请求
+
+### Custom 自定义模式
+- **工作时间限制**：仅在指定时间段内发送保活消息（如 9:00-18:00）
+- **工作日限制**：仅在指定工作日发送（如周一到周五）
+- **灵活配置**：支持跨天时间段（如 22:00-6:00 夜班模式）
+- **智能跳过**：在非工作时间自动跳过任务调度和执行
+
+### 监控功能
 - **状态监控**：每 30 分钟输出一次调度状态
+- **配置日志**：启动时显示当前使用的调度模式和参数
 
 ## 📝 最佳实践
 
@@ -184,6 +209,10 @@ docker-compose logs --since="2h"
 ```
 claude-code-auto-refresh/
 ├── src/
+│   ├── strategies/       # 调度策略
+│   │   ├── ScheduleStrategy.ts   # 策略接口
+│   │   ├── HourlyStrategy.ts     # 24*7 模式
+│   │   └── CustomStrategy.ts     # 自定义模式
 │   ├── index.ts          # 主入口
 │   ├── config.ts         # 配置管理
 │   ├── agent.ts          # Claude 代理
