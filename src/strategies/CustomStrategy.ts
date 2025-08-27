@@ -17,12 +17,19 @@ export class CustomStrategy implements ScheduleStrategy {
     const now = new Date();
     const currentHour = now.getHours();
     const nextHour = (currentHour + 1) % 24;
-    
+    // 计算下一小时对应的星期（跨天则 +1）
+    const nextWeekday = nextHour === 0 ? (now.getDay() + 1) % 7 : now.getDay();
+
     if (!this.isWorkingHour(nextHour)) {
       console.log(`Skipping task scheduling for hour ${nextHour}:00 (outside working hours ${this.startHour}:00-${this.endHour}:00)`);
       return [];
     }
-    
+
+    if (!this.weekdays.includes(nextWeekday)) {
+      console.log(`Skipping task scheduling for weekday ${nextWeekday} (allowed: ${this.weekdays.join(',')})`);
+      return [];
+    }
+
     console.log(`Scheduling tasks for hour ${nextHour}:00 (custom mode)`);
     
     const newTasks: ScheduleTask[] = [];

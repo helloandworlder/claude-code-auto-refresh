@@ -45,7 +45,7 @@ export class TaskScheduler {
       this.checkAndExecuteTasks().catch(error => {
         console.error('[SCHEDULER] Error in checkAndExecuteTasks:', error);
       });
-    });
+    }, { timezone: process.env.TZ || 'Asia/Shanghai' });
     
     // 每个整点后安排下一批任务
     cron.schedule('0 * * * *', () => {
@@ -55,7 +55,7 @@ export class TaskScheduler {
       } catch (error) {
         console.error('[SCHEDULER] Error in scheduleNextHourTasks:', error);
       }
-    });
+    }, { timezone: process.env.TZ || 'Asia/Shanghai' });
     
     // 初始化：为当前小时和下一小时安排任务
     try {

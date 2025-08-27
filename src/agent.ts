@@ -10,51 +10,56 @@ export class ClaudeAgent {
   
   async sendKeepAliveMessage(): Promise<boolean> {
     try {
-      // 临时设置环境变量
-      const originalBaseUrl = process.env.ANTHROPIC_BASE_URL;
-      const originalApiKey = process.env.ANTHROPIC_API_KEY;
-      
-      process.env.ANTHROPIC_BASE_URL = this.group.endpoint;
-      process.env.ANTHROPIC_API_KEY = this.group.apiKey;
-      
+      // 为本次调用构建独立环境，避免并发修改全局 env
+      const env = {
+        ...process.env,
+        ANTHROPIC_BASE_URL: this.group.endpoint,
+        ANTHROPIC_API_KEY: this.group.apiKey,
+      } as Record<string, string>;
+
+      // 超时控制，防止长时间挂起
+      const timeoutMs = (() => {
+        const raw = process.env.KEEPALIVE_TIMEOUT_MS;
+        const n = raw ? parseInt(raw, 10) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : 60_000; // 默认 60s
+      })();
+      const abortController = new AbortController();
+      const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+
       console.log(`[${this.group.id}] Sending keep-alive message to ${this.group.endpoint}`);
-      
+
       // 发送简单的保活消息
       let responseContent = '';
-      for await (const message of query({
-        prompt: 'Please only output \'1\'',
-        options: {
-          maxTurns: 1
-        }
-      })) {
-        if (message.type === 'assistant') {
-          // 获取AI回复内容
-          const msg = (message as any).message;
-          if (msg && msg.content && msg.content[0] && msg.content[0].text) {
-            responseContent += msg.content[0].text;
+      try {
+        for await (const message of query({
+          prompt: "Please only output '1'",
+          options: {
+            maxTurns: 1,
+            env,
+            abortController,
           }
-        } else if (message.type === 'result' && !message.is_error) {
-          console.log(`[${this.group.id}] Response: "${responseContent.trim() || (message as any).result || 'N/A'}" | Cost: $${message.total_cost_usd.toFixed(4)}`);
-          break;
-        } else if (message.type === 'result' && message.is_error) {
-          console.error(`[${this.group.id}] Error response:`, message.subtype);
-          break;
+        })) {
+          if (message.type === 'assistant') {
+            // 获取AI回复内容
+            const msg = (message as any).message;
+            if (msg && msg.content && msg.content[0] && msg.content[0].text) {
+              responseContent += msg.content[0].text;
+            }
+          } else if (message.type === 'result' && !message.is_error) {
+            const costVal = (message as any).total_cost_usd;
+            const costStr = (typeof costVal === 'number' && Number.isFinite(costVal)) ? `$${costVal.toFixed(4)}` : 'N/A';
+            const resultText = (message as any).result;
+            console.log(`[${this.group.id}] Response: "${(responseContent || resultText || 'N/A').toString().trim()}" | Cost: ${costStr}`);
+            break;
+          } else if (message.type === 'result' && message.is_error) {
+            console.error(`[${this.group.id}] Error response:`, (message as any).subtype);
+            break;
+          }
         }
+      } finally {
+        clearTimeout(timeout);
       }
-      
-      // 恢复原始环境变量
-      if (originalBaseUrl) {
-        process.env.ANTHROPIC_BASE_URL = originalBaseUrl;
-      } else {
-        delete process.env.ANTHROPIC_BASE_URL;
-      }
-      
-      if (originalApiKey) {
-        process.env.ANTHROPIC_API_KEY = originalApiKey;
-      } else {
-        delete process.env.ANTHROPIC_API_KEY;
-      }
-      
+
       console.log(`[${this.group.id}] Keep-alive message sent successfully`);
       return true;
       
