@@ -9,6 +9,7 @@ export class TaskScheduler {
   private agents: Map<string, ClaudeAgent> = new Map();
   private scheduledTasks: ScheduleTask[] = [];
   private strategy: ScheduleStrategy;
+  private scheduleConfig: ScheduleConfig;
   
   constructor(groups: ClaudeGroup[], scheduleConfig: ScheduleConfig) {
     // 为每个组创建独立的代理实例
@@ -16,6 +17,7 @@ export class TaskScheduler {
       this.agents.set(group.id, new ClaudeAgent(group));
     });
     
+    this.scheduleConfig = scheduleConfig;
     // 根据配置创建相应的调度策略
     this.strategy = this.createStrategy(scheduleConfig);
   }
@@ -47,17 +49,46 @@ export class TaskScheduler {
       });
     }, { timezone: process.env.TZ || 'Asia/Shanghai' });
     
-    // 每个整点后安排下一批任务
-    cron.schedule('0 * * * *', () => {
+    // 根据配置的间隔时间生成 cron 表达式
+    const intervalMinutes = this.scheduleConfig.intervalMinutes || 60;
+    let cronExpression: string;
+    let scheduleDescription: string;
+    
+    if (intervalMinutes < 60) {
+      // 小于60分钟，使用分钟间隔
+      cronExpression = `*/${intervalMinutes} * * * *`;
+      scheduleDescription = `every ${intervalMinutes} minutes`;
+    } else if (intervalMinutes === 60) {
+      // 每小时
+      cronExpression = '0 * * * *';
+      scheduleDescription = 'every hour';
+    } else {
+      // 大于60分钟，转换为小时间隔
+      const hours = Math.floor(intervalMinutes / 60);
+      if (intervalMinutes % 60 === 0) {
+        // 整小时间隔
+        cronExpression = `0 */${hours} * * *`;
+        scheduleDescription = `every ${hours} hour(s)`;
+      } else {
+        // 非整小时，仍使用分钟间隔（cron 会自动处理）
+        cronExpression = `*/${intervalMinutes} * * * *`;
+        scheduleDescription = `every ${intervalMinutes} minutes`;
+      }
+    }
+    
+    console.log(`[SCHEDULER] Task scheduling configured: ${scheduleDescription} (${cronExpression})`);
+    
+    // 按配置的间隔安排下一批任务
+    cron.schedule(cronExpression, () => {
       try {
-        console.log('[SCHEDULER] Hourly scheduling trigger at', new Date().toLocaleString());
+        console.log(`[SCHEDULER] Interval scheduling trigger at ${new Date().toLocaleString()} (${scheduleDescription})`);
         this.scheduleNextHourTasks();
       } catch (error) {
         console.error('[SCHEDULER] Error in scheduleNextHourTasks:', error);
       }
     }, { timezone: process.env.TZ || 'Asia/Shanghai' });
     
-    // 初始化：为当前小时和下一小时安排任务
+    // 初始化：为当前时段安排任务
     try {
       this.scheduleNextHourTasks();
       console.log('[SCHEDULER] Initial task scheduling completed');
@@ -112,7 +143,7 @@ export class TaskScheduler {
       
       await Promise.all(promises);
     } catch (error) {
-      console.error(`[SCHEDULER] Critical error during task execution:`, error);
+      console.error('[SCHEDULER] Critical error during task execution:', error);
     } finally {
       // 无论执行成功还是失败，都移除已处理的任务，防止死循环
       this.scheduledTasks = this.scheduledTasks.filter(task =>

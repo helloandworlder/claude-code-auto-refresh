@@ -25,6 +25,7 @@ export function loadConfig(): AgentConfig {
   } else {
     // 回退到传统分组配置
     let groupIndex = 1;
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const groupEndpoint = process.env[`CLAUDE_GROUP_${groupIndex}_ENDPOINT`];
       const groupApiKey = process.env[`CLAUDE_GROUP_${groupIndex}_API_KEY`];
@@ -76,14 +77,27 @@ const DEFAULT_CUSTOM_CONFIG = {
 function loadScheduleConfig(): ScheduleConfig {
   const mode = process.env.SCHEDULE_MODE;
   
+  // 读取间隔配置（通用于所有模式）
+  let intervalMinutes: number | undefined;
+  if (process.env.INTERVAL_MINUTES) {
+    const parsed = parseInt(process.env.INTERVAL_MINUTES, 10);
+    if (isNaN(parsed) || parsed < 5 || parsed > 1440) {
+      console.warn(`[CONFIG] Invalid INTERVAL_MINUTES: ${process.env.INTERVAL_MINUTES} (must be 5-1440), using default: 60`);
+      intervalMinutes = 60;
+    } else {
+      intervalMinutes = parsed;
+      console.log(`[CONFIG] Custom interval set to ${intervalMinutes} minutes`);
+    }
+  }
+  
   if (!mode) {
     console.log('[CONFIG] SCHEDULE_MODE not set, using default: hourly');
-    return DEFAULT_SCHEDULE_CONFIG;
+    return { ...DEFAULT_SCHEDULE_CONFIG, intervalMinutes };
   }
   
   if (mode === 'hourly') {
     console.log('[CONFIG] Using hourly schedule mode (24*7)');
-    return { mode: 'hourly' };
+    return { mode: 'hourly', intervalMinutes };
   }
   
   if (mode === 'custom') {
@@ -141,10 +155,11 @@ function loadScheduleConfig(): ScheduleConfig {
       mode: 'custom',
       customStartHour: startHour,
       customEndHour: endHour,
-      customWeekdays: weekdays
+      customWeekdays: weekdays,
+      intervalMinutes
     };
   }
   
   console.warn(`[CONFIG] Unsupported SCHEDULE_MODE: ${mode}, falling back to default: hourly`);
-  return DEFAULT_SCHEDULE_CONFIG;
+  return { ...DEFAULT_SCHEDULE_CONFIG, intervalMinutes };
 }

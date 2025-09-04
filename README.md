@@ -28,6 +28,7 @@ CUSTOM_END_HOUR=22
 
 - 🚀 **首次启动立即发送**：启动后立即发送保活消息，无需等待
 - 🔄 **智能调度系统**：支持 24*7 和自定义时间段两种调度模式
+- ⏱️ **自定义执行间隔**：支持 5-1440 分钟任意间隔，默认 60 分钟
 - 🕰️ **自定义模式**：支持工作日和工作时间段限制（如周一到周五 9:00-18:00）
 - 🔑 **灵活配置方式**：支持统一 Endpoint + 多个 API Key 配置
 - 🏠 **独立实例管理**：每个 API Key 使用独立的 Claude Code 实例
@@ -65,6 +66,9 @@ SCHEDULE_MODE=hourly  # hourly: 24*7模式, custom: 自定义模式
 CUSTOM_START_HOUR=9      # 开始小时 (0-23)
 CUSTOM_END_HOUR=18       # 结束小时 (0-23)
 CUSTOM_WEEKDAYS=1,2,3,4,5  # 工作日 (0=周日,1=周一,...,6=周六)
+
+# 可选：自定义间隔（分钟，5-1440，默认60）
+INTERVAL_MINUTES=30  # 每30分钟执行一次
 
 # 可选：日志级别
 LOG_LEVEL=info
@@ -171,7 +175,7 @@ Agent is running. Press Ctrl+C to stop.
 
 ## ⚙️ 工作原理
 
-1. **🎯 智能调度**：每个整点（如 12:00, 13:00）后，为每个 API Key 安排一个随机时间（1-5 分钟内）的保活任务
+1. **🎯 智能调度**：按配置的间隔（默认每小时，可通过 INTERVAL_MINUTES 自定义），为每个 API Key 安排一个随机时间（1-5 分钟内）的保活任务
 2. **💬 保活消息**：发送简单的消息 `"Please only output '1'"` 来保持后端活跃
 3. **🔄 首次启动**：启动后立即发送一次保活消息，确保服务立即激活
 4. **⚡ 并行执行**：多个 API Key 的任务并行处理，提高效率
@@ -190,6 +194,7 @@ Agent is running. Press Ctrl+C to stop.
 | `CUSTOM_START_HOUR` | 自定义模式开始小时 | `9` | 否*** |
 | `CUSTOM_END_HOUR` | 自定义模式结束小时 | `18` | 否*** |
 | `CUSTOM_WEEKDAYS` | 自定义模式工作日 | `1,2,3,4,5` | 否*** |
+| `INTERVAL_MINUTES` | 自定义执行间隔（分钟） | `30` | 否 |
 | `CLAUDE_GROUP_N_ENDPOINT` | 第 N 组的 API 端点 | `https://api.anthropic.com` | 否** |
 | `CLAUDE_GROUP_N_API_KEY` | 第 N 组的 API 密钥 | `your-api-key` | 否** |
 | `LOG_LEVEL` | 日志级别 | `info`/`debug`/`warn`/`error` | 否 |
@@ -200,38 +205,22 @@ Agent is running. Press Ctrl+C to stop.
 \*\* 使用传统分组配置时必填  
 \*\*\* 仅在 `SCHEDULE_MODE=custom` 时相关
 
-### Docker Compose 配置
-
-```yaml
-version: '3.8'
-services:
-  claude-agent:
-    build: .
-    container_name: claude-auto-refresh
-    restart: unless-stopped
-    environment:
-      - TZ=Asia/Shanghai
-      - CLAUDE_ENDPOINT=https://claude-relay.synex.im/api
-      - CLAUDE_API_KEYS=your-key-1,your-key-2
-      - LOG_LEVEL=info
-    volumes:
-      - ./logs:/app/logs
-```
 
 ## 🔄 调度机制
 
 ### Hourly 模式（默认）
-- **24*7 运行**：全天候每小时保活
+- **24*7 运行**：全天候保活
 - **启动时**：立即发送保活消息给所有配置的 API Key
-- **定时任务**：每个整点后的 1-5 分钟内随机发送
+- **定时任务**：按配置的间隔执行（默认每小时，可通过 INTERVAL_MINUTES 自定义）
 - **任务分布**：不同 API Key 的任务时间随机分布，避免同时请求
 
 ### Custom 自定义模式
 - **工作时间限制**：仅在指定时间段内发送保活消息（如 9:00-18:00）
 - **工作日限制**：仅在指定工作日发送（如周一到周五）
-- **排程阶段过滤非工作日**：为“下一小时”生成任务时，会同时检查其对应的星期；非工作日不生成任务，避免产生不可执行的排程
+- **排程阶段过滤非工作日**：为"下一小时"生成任务时，会同时检查其对应的星期；非工作日不生成任务，避免产生不可执行的排程
 - **灵活配置**：支持跨天时间段（如 22:00-6:00 夜班模式）
 - **智能跳过**：在非工作时间自动跳过任务调度和执行
+- **自定义间隔**：同样支持通过 INTERVAL_MINUTES 设置执行间隔
 
 ### 监控功能
 - **状态监控**：每 30 分钟输出一次调度状态

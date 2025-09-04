@@ -32,7 +32,7 @@ export class ClaudeAgent {
       let responseContent = '';
       try {
         for await (const message of query({
-          prompt: "Please only output '1'",
+          prompt: 'Please only output \'1\'',
           options: {
             maxTurns: 1,
             env,

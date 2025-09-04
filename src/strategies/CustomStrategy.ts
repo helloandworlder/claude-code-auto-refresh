@@ -13,7 +13,7 @@ export class CustomStrategy implements ScheduleStrategy {
     this.weekdays = weekdays;
   }
   
-  scheduleNextHourTasks(agents: Map<string, ClaudeAgent>, currentTasks: ScheduleTask[]): ScheduleTask[] {
+  scheduleNextHourTasks(agents: Map<string, ClaudeAgent>, _currentTasks: ScheduleTask[]): ScheduleTask[] {
     const now = new Date();
     const currentHour = now.getHours();
     const nextHour = (currentHour + 1) % 24;
@@ -56,7 +56,7 @@ export class CustomStrategy implements ScheduleStrategy {
     return newTasks;
   }
   
-  shouldExecuteTask(task: ScheduleTask): boolean {
+  shouldExecuteTask(_task: ScheduleTask): boolean {
     const now = new Date();
     const currentHour = now.getHours();
     const currentWeekday = now.getDay();

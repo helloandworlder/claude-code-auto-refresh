@@ -9,6 +9,7 @@ export interface ScheduleConfig {
   customStartHour?: number;
   customEndHour?: number;
   customWeekdays?: number[];
+  intervalMinutes?: number;
 }
 
 export interface AgentConfig {
