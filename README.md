@@ -136,6 +136,7 @@ curl -O https://raw.githubusercontent.com/sczheng189/claude-code-auto-refresh/ma
 # 配置环境变量
 cp .env.example .env
 # 编辑 .env 文件
+nano .env
 
 # 启动服务
 docker-compose up -d
