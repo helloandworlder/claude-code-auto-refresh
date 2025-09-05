@@ -23,15 +23,18 @@ export class TaskScheduler {
   }
   
   private createStrategy(config: ScheduleConfig): ScheduleStrategy {
+    const intervalMinutes = config.intervalMinutes || 60;
+    
     if (config.mode === 'custom') {
       return new CustomStrategy(
         config.customStartHour!,
         config.customEndHour!,
-        config.customWeekdays!
+        config.customWeekdays!,
+        intervalMinutes
       );
     }
     
-    return new HourlyStrategy();
+    return new HourlyStrategy(intervalMinutes);
   }
   
   start(): void {

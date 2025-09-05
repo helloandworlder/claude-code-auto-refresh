@@ -6,42 +6,58 @@ export class CustomStrategy implements ScheduleStrategy {
   private startHour: number;
   private endHour: number;
   private weekdays: number[];
+  private intervalMinutes: number;
   
-  constructor(startHour: number, endHour: number, weekdays: number[]) {
+  constructor(startHour: number, endHour: number, weekdays: number[], intervalMinutes: number = 60) {
     this.startHour = startHour;
     this.endHour = endHour;
     this.weekdays = weekdays;
+    this.intervalMinutes = intervalMinutes;
   }
   
   scheduleNextHourTasks(agents: Map<string, ClaudeAgent>, _currentTasks: ScheduleTask[]): ScheduleTask[] {
     const now = new Date();
-    const currentHour = now.getHours();
-    const nextHour = (currentHour + 1) % 24;
-    // 计算下一小时对应的星期（跨天则 +1）
-    const nextWeekday = nextHour === 0 ? (now.getDay() + 1) % 7 : now.getDay();
-
-    if (!this.isWorkingHour(nextHour)) {
-      console.log(`Skipping task scheduling for hour ${nextHour}:00 (outside working hours ${this.startHour}:00-${this.endHour}:00)`);
+    
+    // 基于间隔计算下次执行时间
+    let nextTime = new Date(now.getTime() + this.intervalMinutes * 60 * 1000);
+    
+    // 寻找下一个合适的工作时间
+    let attempts = 0;
+    const maxAttempts = 14; // 最多检查两周
+    
+    while (attempts < maxAttempts) {
+      const nextHour = nextTime.getHours();
+      const nextWeekday = nextTime.getDay();
+      
+      // 检查是否在工作时间和工作日
+      if (this.isWorkingHour(nextHour) && this.weekdays.includes(nextWeekday)) {
+        break; // 找到合适的时间
+      }
+      
+      // 如果不在工作时间，跳到下一个工作时段开始
+      if (!this.isWorkingHour(nextHour)) {
+        nextTime = this.getNextWorkingHourStart(nextTime);
+      } else if (!this.weekdays.includes(nextWeekday)) {
+        // 如果不在工作日，跳到下一天
+        nextTime.setDate(nextTime.getDate() + 1);
+        nextTime.setHours(this.startHour, 0, 0, 0);
+      }
+      
+      attempts++;
+    }
+    
+    if (attempts >= maxAttempts) {
+      console.log('Unable to find valid working time within 2 weeks, skipping task scheduling');
       return [];
     }
 
-    if (!this.weekdays.includes(nextWeekday)) {
-      console.log(`Skipping task scheduling for weekday ${nextWeekday} (allowed: ${this.weekdays.join(',')})`);
-      return [];
-    }
-
-    console.log(`Scheduling tasks for hour ${nextHour}:00 (custom mode)`);
+    console.log(`Scheduling tasks for ${nextTime.toLocaleString()} (custom mode, ${this.intervalMinutes} min interval)`);
     
     const newTasks: ScheduleTask[] = [];
     
     agents.forEach((agent, groupId) => {
       const randomMinutes = Math.floor(Math.random() * 5) + 1; // 1-5分钟
-      const scheduledTime = new Date();
-      scheduledTime.setHours(nextHour, randomMinutes, 0, 0);
-      
-      if (scheduledTime <= now) {
-        scheduledTime.setDate(scheduledTime.getDate() + 1);
-      }
+      const scheduledTime = new Date(nextTime.getTime() + randomMinutes * 60 * 1000);
       
       const task: ScheduleTask = {
         id: `${groupId}_${scheduledTime.getTime()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -84,5 +100,36 @@ export class CustomStrategy implements ScheduleStrategy {
       // 跨天情况：22:00-6:00
       return hour >= this.startHour || hour < this.endHour;
     }
+  }
+
+  private getNextWorkingHourStart(currentTime: Date): Date {
+    const nextTime = new Date(currentTime);
+    const currentHour = currentTime.getHours();
+    
+    if (this.startHour <= this.endHour) {
+      // 正常情况：如果当前时间在工作时间之前，设置为开始时间
+      // 如果在工作时间之后，设置为第二天的开始时间
+      if (currentHour < this.startHour) {
+        nextTime.setHours(this.startHour, 0, 0, 0);
+      } else {
+        nextTime.setDate(nextTime.getDate() + 1);
+        nextTime.setHours(this.startHour, 0, 0, 0);
+      }
+    } else {
+      // 跨天情况：22:00-6:00
+      if (currentHour < this.endHour) {
+        // 如果在凌晨时段（如3:00），但不在工作时间内，跳到晚上开始时间
+        nextTime.setHours(this.startHour, 0, 0, 0);
+      } else if (currentHour < this.startHour) {
+        // 如果在白天（如14:00），跳到晚上开始时间
+        nextTime.setHours(this.startHour, 0, 0, 0);
+      } else {
+        // 如果已经在晚上工作时间之后，跳到第二天晚上
+        nextTime.setDate(nextTime.getDate() + 1);
+        nextTime.setHours(this.startHour, 0, 0, 0);
+      }
+    }
+    
+    return nextTime;
   }
 }

@@ -160,27 +160,34 @@ npm start
 ```
 Claude Code Auto Refresh Agent Starting...
 Loaded unified configuration: 2 API keys with endpoint: https://claude-relay.synex.im/api
+[CONFIG] Custom interval set to 120 minutes
+[CONFIG] Loading custom schedule configuration...
+[CONFIG] Custom schedule configured: 7:00-13:00 on weekdays [1,2,3,4,5] (0=Sunday, 1=Monday...)
 Initialized with 2 Claude groups
-Starting task scheduler...
+[SCHEDULER] Starting task scheduler...
+[SCHEDULER] Task scheduling configured: every 2 hour(s) (0 */2 * * *)
 Sending initial keep-alive messages for all groups...
 [INITIAL] Sending keep-alive message for key_1...
 [key_1] Sending keep-alive message to https://claude-relay.synex.im/api
 [key_1] Response: "1" | Cost: $0.0311
 [key_1] Keep-alive message sent successfully
-Scheduling tasks for hour 18:00
-Scheduled task for key_1 at 8/21/2025, 6:03:00 PM
-Scheduled task for key_2 at 8/21/2025, 6:01:00 PM
+[SCHEDULER] Interval scheduling trigger at 9/5/2025, 10:00:00 AM (every 2 hour(s))
+Scheduling tasks for 9/5/2025, 12:03:00 PM (custom mode, 120 min interval)
+Scheduled task for key_1 at 9/5/2025, 12:05:00 PM (custom mode)
+Scheduled task for key_2 at 9/5/2025, 12:02:00 PM (custom mode)
 Agent is running. Press Ctrl+C to stop.
 ```
 
 ## ⚙️ 工作原理
 
-1. **🎯 智能调度**：按配置的间隔（默认每小时，可通过 INTERVAL_MINUTES 自定义），为每个 API Key 安排一个随机时间（1-5 分钟内）的保活任务
-2. **💬 保活消息**：发送简单的消息 `"Please only output '1'"` 来保持后端活跃
-3. **🔄 首次启动**：启动后立即发送一次保活消息，确保服务立即激活
-4. **⚡ 并行执行**：多个 API Key 的任务并行处理，提高效率
-5. **📊 完整监控**：显示 AI 回复内容、成本信息和调度状态
-6. **🔒 并发安全**：对每个分组调用时，通过专属 `env` 向 SDK 注入该组的 `endpoint`/`apiKey`，不修改全局环境变量，避免并发竞态
+1. **🎯 智能调度**：启动后根据配置的间隔（默认60分钟，可通过 INTERVAL_MINUTES 自定义），动态计算下次执行时间并安排保活任务
+2. **⏰ 间隔触发**：使用 cron 表达式按设定间隔触发调度（如每30分钟、每2小时等）
+3. **💬 保活消息**：发送简单的消息 `"Please only output '1'"` 来保持后端活跃
+4. **🔄 首次启动**：启动后立即发送一次保活消息，确保服务立即激活
+5. **🕐 随机延迟**：每个 API Key 在计算出的时间基础上添加1-5分钟随机延迟，避免同时触发
+6. **⚡ 并行执行**：多个 API Key 的任务并行处理，提高效率
+7. **📊 完整监控**：显示 AI 回复内容、成本信息和调度状态
+8. **🔒 并发安全**：对每个分组调用时，通过专属 `env` 向 SDK 注入该组的 `endpoint`/`apiKey`，不修改全局环境变量，避免并发竞态
 
 ## 📊 配置说明
 
@@ -209,18 +216,18 @@ Agent is running. Press Ctrl+C to stop.
 ## 🔄 调度机制
 
 ### Hourly 模式（默认）
-- **24*7 运行**：全天候保活
+- **24*7 运行**：全天候保活，不受时间限制
 - **启动时**：立即发送保活消息给所有配置的 API Key
-- **定时任务**：按配置的间隔执行（默认每小时，可通过 INTERVAL_MINUTES 自定义）
-- **任务分布**：不同 API Key 的任务时间随机分布，避免同时请求
+- **间隔执行**：按配置的间隔持续执行（默认60分钟，可通过 INTERVAL_MINUTES 自定义）
+- **执行示例**：设置300分钟间隔时，启动后立即执行 → 5小时后执行 → 再5小时后执行...
 
 ### Custom 自定义模式
-- **工作时间限制**：仅在指定时间段内发送保活消息（如 9:00-18:00）
+- **工作时间限制**：仅在指定时间段内发送保活消息（如 7:00-13:00）
 - **工作日限制**：仅在指定工作日发送（如周一到周五）
-- **排程阶段过滤非工作日**：为"下一小时"生成任务时，会同时检查其对应的星期；非工作日不生成任务，避免产生不可执行的排程
+- **智能时间计算**：当计算出的下次执行时间超出工作时间时，自动跳到下一个工作时段
 - **灵活配置**：支持跨天时间段（如 22:00-6:00 夜班模式）
-- **智能跳过**：在非工作时间自动跳过任务调度和执行
-- **自定义间隔**：同样支持通过 INTERVAL_MINUTES 设置执行间隔
+- **间隔与时间窗口结合**：支持在工作时间内按自定义间隔执行
+- **执行示例**：300分钟间隔，7-13工作时间时，10:00执行 → 计算15:00超出工作时间 → 跳到明天7:00执行
 
 ### 监控功能
 - **状态监控**：每 30 分钟输出一次调度状态

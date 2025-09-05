@@ -3,22 +3,29 @@ import { ClaudeAgent } from '../agent';
 import { ScheduleTask } from '../types';
 
 export class HourlyStrategy implements ScheduleStrategy {
+  private intervalMinutes: number;
+
+  constructor(intervalMinutes: number = 60) {
+    this.intervalMinutes = intervalMinutes;
+  }
+
   scheduleNextHourTasks(agents: Map<string, ClaudeAgent>, _currentTasks: ScheduleTask[]): ScheduleTask[] {
     const now = new Date();
-    const currentHour = now.getHours();
-    const nextHour = (currentHour + 1) % 24;
     
-    console.log(`Scheduling tasks for hour ${nextHour}:00`);
+    // 基于间隔计算下次执行时间
+    const nextTime = new Date(now.getTime() + this.intervalMinutes * 60 * 1000);
+    
+    console.log(`Scheduling tasks for ${nextTime.toLocaleString()} (${this.intervalMinutes} min interval)`);
     
     const newTasks: ScheduleTask[] = [];
     
     agents.forEach((agent, groupId) => {
       const randomMinutes = Math.floor(Math.random() * 5) + 1; // 1-5分钟
-      const scheduledTime = new Date();
-      scheduledTime.setHours(nextHour, randomMinutes, 0, 0);
+      const scheduledTime = new Date(nextTime.getTime() + randomMinutes * 60 * 1000);
       
+      // 确保任务时间不会在过去
       if (scheduledTime <= now) {
-        scheduledTime.setDate(scheduledTime.getDate() + 1);
+        scheduledTime.setTime(now.getTime() + (this.intervalMinutes + randomMinutes) * 60 * 1000);
       }
       
       const task: ScheduleTask = {
